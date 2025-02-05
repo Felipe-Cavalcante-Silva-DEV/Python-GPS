@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+</head>
+<body>
+    <h1>Rastreamento GPS em Tempo Real</h1>
+    <div id="map" style="height: 500px;"></div>
+
+    <script>
+        // Inicializar o mapa com a posição inicial (Brasília)
+        var map = L.map('map').setView([-15.7801, -47.9292], 13);
+
+        // Adicionar camada de tiles do OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // Inicializar marcador no mapa
+        var marker = L.marker([-15.7801, -47.9292]).addTo(map);
+
+        // Conectar ao servidor Flask usando Socket.IO
+        var socket = io.connect('http://localhost:5000');
+
+        // Função para obter a localização do usuário
+        function getUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    var lat = position.coords.latitude;
+                    var lon = position.coords.longitude;
+                    console.log(`Localização do usuário: ${lat}, ${lon}`);
+
+                    // Atualiza a posição do marcador no mapa
+                    map.setView([lat, lon], 13);
+                    marker.setLatLng([lat, lon]);
+
+                    // Envia os dados para o servidor
+                    socket.emit('gps_data', {
+                        latitude: lat,
+                        longitude: lon,
+                        timestamp: Date.now()
+                    });
+                }, function(error) {
+                    console.error("Erro ao obter localização", error);
+                    // Caso falhe, mantém a posição inicial (Brasília)
+                    socket.emit('gps_data', {
+                        latitude: -15.7801,
+                        longitude: -47.9292,
+                        timestamp: Date.now()
+                    });
+                });
+            } else {
+                console.error("Geolocalização não é suportada neste navegador.");
+            }
+        }
+
+        // Obter localização do usuário a cada 5 segundos
+        setInterval(getUserLocation, 5000);
+
+        // Ouvir os dados de GPS e atualizar o mapa
+        socket.on('update_map', function(data) {
+            console.log(data);  // Verifique os dados recebidos
+            var lat = data.latitude;
+            var lon = data.longitude;
+            
+            // Atualizar a posição do mapa
+            map.setView([lat, lon], 13);
+            
+            // Atualizar o marcador
+            marker.setLatLng([lat, lon]);
+        });
+
+        function getUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    var lat = position.coords.latitude;
+                    var lon = position.coords.longitude;
+                    var accuracy = position.coords.accuracy; // Adicionando a precisão
+
+                    console.log(`Localização do usuário: ${lat}, ${lon} com precisão de ${accuracy} metros`);
+
+                    // Atualiza a posição do marcador no mapa
+                    map.setView([lat, lon], 13);
+                    marker.setLatLng([lat, lon]);
+
+                    // Envia os dados para o servidor
+                    socket.emit('gps_data', {
+                        latitude: lat,
+                        longitude: lon,
+                        timestamp: Date.now()
+                    });
+                }, function(error) {
+                    console.error("Erro ao obter localização", error);
+                    socket.emit('gps_data', {
+                        latitude: -15.7801,
+                        longitude: -47.9292,
+                        timestamp: Date.now()
+                    });
+                });
+            } else {
+                console.error("Geolocalização não é suportada neste navegador.");
+            }
+        }
+        let lastUpdateTime = 0;  // Variável para controle de intervalo de atualização
+
+        socket.on('gps_data', function(data) {
+            console.log("Dados GPS recebidos:", data);
+
+            // Verifica se os dados possuem latitude e longitude válidos
+            if (data && data.latitude && data.longitude) {
+                var lat = parseFloat(data.latitude);   // Garantir que é um número
+                var lon = parseFloat(data.longitude);  // Garantir que é um número
+
+                var currentTime = Date.now();
+
+                // Só atualizar se passou um tempo mínimo desde a última atualização (por exemplo, 500 ms)
+                if (currentTime - lastUpdateTime > 500) {
+                    lastUpdateTime = currentTime;
+
+                    // Atualiza a posição do marcador no mapa
+                    marker.setLatLng([lat, lon]);
+
+                    // Atualiza o centro do mapa (use setView para centralizar)
+                    map.setView([lat, lon], 13); // Centraliza o mapa com a nova posição
+                    console.log("Novo marcador posicionado em:", lat, lon);
+                }
+            } else {
+                console.error("Dados de GPS incompletos ou inválidos:", data);
+            }
+        });
+
+    </script>
+
+    
+</body>
+</html>
